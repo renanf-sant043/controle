@@ -1,0 +1,149 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#080d15">
+<title>Controle — NEXUS: BREACH</title>
+<style>
+*{box-sizing:border-box;touch-action:none}
+body{margin:0;background:#080d15;color:#e4fff2;font:14px Consolas,monospace;height:100dvh;overflow:hidden;user-select:none}
+header{height:66px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #243d3b}
+h1{font-size:18px;letter-spacing:2px;color:#75ffc3;margin:0}
+small{color:#8ca6b6}
+#status{font-size:10px;color:#ffd66f}
+main{height:calc(100dvh - 66px);display:flex;flex-direction:column;padding:12px;gap:12px}
+#look{flex:1;min-height:80px;border:1px solid #2b4845;border-radius:14px;background:linear-gradient(135deg,#13212c,#0a111a);display:grid;place-items:center;color:#78949c}
+#look span{pointer-events:none;text-align:center;line-height:1.8}
+.bottom{height:220px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.panel{border:1px solid #263d3c;border-radius:14px;background:#0d1721;display:flex;align-items:center;justify-content:center;position:relative}
+#stick{width:min(42vw,165px);height:min(42vw,165px);max-height:165px;max-width:165px;border:1px solid #35534e;border-radius:50%;background:#111f2b;position:relative}
+#knob{position:absolute;left:50%;top:50%;width:45%;height:45%;transform:translate(-50%,-50%);border-radius:50%;background:#31564f;border:2px solid #75ffc3;box-shadow:0 0 20px #75ffc322}
+.caption{position:absolute;top:10px;color:#8ca6b6;font-size:10px;letter-spacing:1px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:center;padding:10px}
+button{border:1px solid #37564f;background:#172b32;color:#e6fff2;border-radius:13px;min-height:57px;font:bold 13px Consolas,monospace}
+button:active,.active{background:#75ffc3;color:#06110c}
+#fire{grid-column:span 2;min-height:70px;background:#4a2028;border-color:#a94e5d;color:#fff0f2;font-size:18px}
+#fire.active{background:#ff667a;color:#21070b}
+#run{background:#173b31}
+#reload{background:#2b2b20;border-color:#61562c}
+footer{text-align:center;color:#66818a;font-size:10px;padding:0 4px}
+@media(max-height:650px){.bottom{height:165px}#stick{width:125px;height:125px}button{min-height:43px}#fire{min-height:52px}main{gap:7px;padding:8px}}
+</style>
+</head>
+<body>
+<header>
+ <div><h1>NEXUS // CONTROL</h1><small>CONTROLE TÁTICO REMOTO</small></div>
+ <div id="status">CONECTANDO...</div>
+</header>
+<main>
+ <div id="look"><span>DESLIZE AQUI PARA<br>VIRAR A CÂMERA</span></div>
+ <div class="bottom">
+  <div class="panel">
+   <div class="caption">MOVIMENTO</div>
+   <div id="stick"><div id="knob"></div></div>
+  </div>
+  <div class="panel">
+   <div class="caption">AÇÕES</div>
+   <div class="actions" style="width:100%">
+    <button id="run">CORRER</button>
+    <button id="reload">RECARREGAR</button>
+    <button id="fire">DISPARAR</button>
+    <button id="interact" style="grid-column:span 2">INTERAGIR</button>
+   </div>
+  </div>
+ </div>
+ <footer>Conecte o celular e o PC à mesma rede Wi-Fi.</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const state={moveX:0,moveY:0,lookX:0,fire:false,sprint:false,reload:false,interact:false};
+let stickPointer=null,lookPointer=null,lookCenter=0;
+let lastSend=0,failed=0;
+
+async function send(){
+ const now=performance.now();
+ if(now-lastSend<35)return;
+ lastSend=now;
+ try{
+  const r=await fetch("/api/controls",{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify(state)
+  });
+  if(!r.ok)throw Error("HTTP");
+  failed=0;$("status").textContent="CONECTADO";$("status").style.color="#75ffc3";
+ }catch(e){
+  failed++;
+  $("status").textContent="SEM CONEXÃO";
+  $("status").style.color="#ff8293";
+ }
+}
+function updateStick(e){
+ const rect=$("stick").getBoundingClientRect();
+ const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+ const max=rect.width*.29;
+ let dx=e.clientX-cx,dy=e.clientY-cy;
+ const len=Math.hypot(dx,dy);
+ if(len>max){dx=dx/len*max;dy=dy/len*max}
+ $("knob").style.left=`${50+dx/rect.width*100}%`;
+ $("knob").style.top=`${50+dy/rect.height*100}%`;
+ state.moveX=dx/max;
+ state.moveY=-dy/max;
+}
+function resetStick(){
+ stickPointer=null;state.moveX=0;state.moveY=0;
+ $("knob").style.left="50%";$("knob").style.top="50%";
+}
+$("stick").addEventListener("pointerdown",e=>{
+ stickPointer=e.pointerId;$("stick").setPointerCapture(e.pointerId);updateStick(e);
+});
+$("stick").addEventListener("pointermove",e=>{if(e.pointerId===stickPointer)updateStick(e)});
+$("stick").addEventListener("pointerup",e=>{if(e.pointerId===stickPointer)resetStick()});
+$("stick").addEventListener("pointercancel",resetStick);
+
+$("look").addEventListener("pointerdown",e=>{
+ lookPointer=e.pointerId;lookCenter=e.clientX;
+ $("look").setPointerCapture(e.pointerId);
+});
+$("look").addEventListener("pointermove",e=>{
+ if(e.pointerId!==lookPointer)return;
+ const delta=e.clientX-lookCenter;
+ state.lookX=Math.max(-1,Math.min(1,delta/55));
+ lookCenter=e.clientX;
+});
+function endLook(){lookPointer=null;state.lookX=0}
+$("look").addEventListener("pointerup",endLook);
+$("look").addEventListener("pointercancel",endLook);
+
+function hold(id,key){
+ const el=$(id);
+ el.addEventListener("pointerdown",e=>{
+  e.preventDefault();state[key]=true;el.classList.add("active");
+ });
+ const release=e=>{state[key]=false;el.classList.remove("active")};
+ el.addEventListener("pointerup",release);
+ el.addEventListener("pointercancel",release);
+ el.addEventListener("lostpointercapture",release);
+}
+hold("fire","fire");
+hold("run","sprint");
+
+function pulse(id,key){
+ $(id).addEventListener("click",()=>{
+  state[key]=true;send();
+  setTimeout(()=>{state[key]=false;send()},100);
+ });
+}
+pulse("reload","reload");
+pulse("interact","interact");
+
+setInterval(send,40);
+addEventListener("pagehide",()=>{
+ state.moveX=0;state.moveY=0;state.fire=false;state.sprint=false;
+ send();
+});
+</script>
+</body>
+</html>
